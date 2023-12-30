@@ -1,0 +1,63 @@
+service: scsvDataTransferProcess
+plugins:
+  - serverless-lift
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-west-2
+  iam:
+    deploymentRole: arn:aws:iam::554944332943:role/cfn-deploy-role
+    
+constructs:
+  cardDataQueue:
+    type: queue
+    worker:
+      handler: handler.handleS3Upload
+      role: arn:aws:iam::554944332943:role/cfn-deploy-role
+  csvupload:
+    type: storage
+    
+functions:
+  handleS3Upload:
+    handler: handler.handleS3Upload
+    role: arn:aws:iam::554944332943:role/lambda-execution-role
+    environment:
+      queueUrl: ${construct:cardDataQueue.queueUrl}
+    events:
+      - s3:
+          bucket: ${construct:csvupload.bucketName}
+          existing: true
+
+resources:
+  Resources:
+    loyaltyCards:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: loyaltyCards
+        AttributeDefinitions:
+          - AttributeName: card_number
+            AttributeType: S
+        KeySchema:
+          - AttributeName: card_number
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - ${ResourceName} From Stack ${AWS::StackName}
+        - ResourceName: Api
+      StageName: Prod
+      DefinitionBody:
+        openapi: '3.0'
+        info: {}
+        paths:
+          /:
+            get:
+              responses: {}
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
